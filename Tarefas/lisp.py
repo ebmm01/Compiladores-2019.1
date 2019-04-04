@@ -1,5 +1,6 @@
 import math
 import operator as op
+from collections import ChainMap
 
 def tokenize(chars: str) -> list:
     """
@@ -85,6 +86,13 @@ def standard_env():
         'procedure?': lambda x: callable(x),
         'symbol?': lambda x: isinstance(x, Symbol),
     })
+    env.update({
+        'even?': lambda x: (x % 2)==0,
+        'odd?': lambda x: (x % 2)!=0,
+        'quotient': lambda x,y: math.trunc(x/y),
+        'modulo': lambda x,y: x%y,
+        'remainder': lambda x,y: x - y*math.trunc(x/y),
+    })
     return env
     
 global_env = standard_env()
@@ -110,31 +118,42 @@ def eval(x: Exp, env = None) -> Exp:
     # Se for condicional
     if x[0] == 'if':
         _,condicao, verdadeiro, falso = x
-        return eval(verdadeiro if eval(condicao, env) else falso)
+        return eval(verdadeiro,env) if eval(condicao, env) else eval(falso,env)
     
     # Definindo uma variável
     if x[0] == 'define':
         (_, variable, value) = x
-        env[variable] = eval(value, env)
-        return env[variable]
+        env[variable] = result = eval(value, env)
+        return result
     
     # Quote (será melhorado futuramente)
     if x[0] == 'quote':
         _, value = x
         return value
     
+    if x[0] == 'lambda':
+        
+        _ ,var, exp = x
+        
+        def lambda_function(*args_value):
+            local = dict(zip(var, args_value))
+            new_env = ChainMap(local, env)
+            return eval(exp, new_env)
+        return lambda_function
+    
     # Qualquer outro que não acima:
     else:
-        func, *args = x
-        func = eval(func)
+        
+        func = eval(x[0], env)
         """
         o env abaixo é obrigatório porque ele pode se alterar na recursão.
         Se não estiver explícito, pode levar a erros na compilição de certos lips
         Ex.: Tente rodar eval(parse("(begin (define r 10) (* pi (* r r)))")) sem o env
         E veja o erro acontecer.
         """
-        args = [eval(arg, env) for arg in args]
+        args = [eval(arg, env) for arg in x[1:]]
         return func(*args)
+        
 
 def repl(prompt='lis.py> '):
     """
